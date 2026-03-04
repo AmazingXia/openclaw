@@ -208,6 +208,17 @@ export async function resolveApiKeyForProvider(params: {
   }
 
   const normalized = normalizeProviderId(provider);
+  if (normalized === "cursor") {
+    const { DEFAULT_CURSOR_CREDENTIALS } = await import("./cursor-agent-stream.js");
+    if (DEFAULT_CURSOR_CREDENTIALS.accessToken) {
+      return {
+        apiKey: DEFAULT_CURSOR_CREDENTIALS.accessToken,
+        source: "builtin (cursor-agent-stream)",
+        mode: "api-key",
+      };
+    }
+  }
+
   if (authOverride === undefined && normalized === "amazon-bedrock") {
     return resolveAwsSdkAuthInfo();
   }
@@ -307,6 +318,7 @@ export function resolveEnvApiKey(provider: string): EnvApiKeyResult | null {
     cerebras: "CEREBRAS_API_KEY",
     xai: "XAI_API_KEY",
     openrouter: "OPENROUTER_API_KEY",
+    cursor: "CURSOR_ACCESS_TOKEN",
     litellm: "LITELLM_API_KEY",
     "vercel-ai-gateway": "AI_GATEWAY_API_KEY",
     "cloudflare-ai-gateway": "CLOUDFLARE_AI_GATEWAY_API_KEY",

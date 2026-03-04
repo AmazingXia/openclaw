@@ -146,6 +146,10 @@ const LOCAL_PROVIDER_HINTS: Record<string, string> = {
     "vLLM requires authentication to be registered as a provider. " +
     'Set VLLM_API_KEY (any value works) or run "openclaw configure". ' +
     "See: https://docs.openclaw.ai/providers/vllm",
+  cursor:
+    "Cursor requires a Cursor IDE session token. " +
+    'Set CURSOR_ACCESS_TOKEN (or add a cursor auth profile) or run "openclaw configure". ' +
+    "Optional: CURSOR_MACHINE_ID, CURSOR_MAC_MACHINE_ID.",
 };
 
 function buildUnknownModelError(provider: string, modelId: string): string {

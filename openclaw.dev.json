@@ -1,0 +1,29 @@
+{
+  "meta": {
+    "lastTouchedVersion": "2026.3.3",
+    "lastTouchedAt": "2026-03-04T07:43:12.592Z"
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "cursor/default"
+      },
+      "compaction": {
+        "mode": "safeguard"
+      }
+    }
+  },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto",
+    "restart": true,
+    "ownerDisplay": "raw"
+  },
+  "gateway": {
+    "mode": "local",
+    "auth": {
+      "mode": "token",
+      "token": "92218b041e68f9752c4932b4bf3f029e225d27eb6c501cbb"
+    }
+  }
+}

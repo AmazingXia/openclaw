@@ -35,6 +35,10 @@ import {
   listChannelSupportedActions,
   resolveChannelMessageToolHints,
 } from "../../channel-tools.js";
+import {
+  createCursorAgentStreamFn,
+  DEFAULT_CURSOR_CREDENTIALS,
+} from "../../cursor-agent-stream.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../defaults.js";
 import { resolveOpenClawDocsPath } from "../../docs-path.js";
 import { isTimeoutError } from "../../failover-error.js";
@@ -1003,6 +1007,10 @@ export async function runEmbeddedAttempt(
           log.warn(`[ws-stream] no API key for provider=${params.provider}; using HTTP transport`);
           activeSession.agent.streamFn = streamSimple;
         }
+      } else if (params.model.api === "cursor-agent") {
+        activeSession.agent.streamFn = createCursorAgentStreamFn(DEFAULT_CURSOR_CREDENTIALS, {
+          signal: runAbortController.signal,
+        });
       } else {
         // Force a stable streamFn reference so vitest can reliably mock @mariozechner/pi-ai.
         activeSession.agent.streamFn = streamSimple;

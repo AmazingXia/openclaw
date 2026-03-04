@@ -828,6 +828,27 @@ function buildOpenrouterProvider(): ProviderConfig {
   };
 }
 
+const CURSOR_AGENT_API_BASE = "https://agent.api5.cursor.sh";
+
+/** Cursor IDE Agent API (BiDi 协议，与 cursor-client 一致). 凭据用 auth profile 或 CURSOR_API_KEY。 */
+function buildCursorProvider(): ProviderConfig {
+  return {
+    baseUrl: CURSOR_AGENT_API_BASE,
+    api: "cursor-agent",
+    models: [
+      {
+        id: "default",
+        name: "Cursor Default",
+        reasoning: false,
+        input: ["text", "image"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: OPENROUTER_DEFAULT_CONTEXT_WINDOW,
+        maxTokens: OPENROUTER_DEFAULT_MAX_TOKENS,
+      },
+    ],
+  };
+}
+
 async function buildVllmProvider(params?: {
   baseUrl?: string;
   apiKey?: string;
@@ -1121,6 +1142,9 @@ export async function resolveImplicitProviders(params: {
   if (openrouterKey) {
     providers.openrouter = { ...buildOpenrouterProvider(), apiKey: openrouterKey };
   }
+
+  // Cursor 凭据在 cursor-agent-stream 中写死，此处始终注册以便 cursor/default 可用
+  providers.cursor = { ...buildCursorProvider(), apiKey: "cursor-builtin" };
 
   const nvidiaKey =
     resolveEnvApiKeyVarName("nvidia") ??
