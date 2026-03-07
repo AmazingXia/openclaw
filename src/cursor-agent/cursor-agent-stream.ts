@@ -429,6 +429,24 @@ function execShellOnce(workspace: string, args: Record<string, unknown>) {
 
 // ── 从 context 提取 prompt ──────────────────────────────
 
+/**
+ * OpenClaw 会在用户消息前自动加上元数据前缀，格式如：
+ *   Sender (untrusted metadata):
+ *   ```json
+ *   { "label": "...", "id": "..." }
+ *   ```
+ *
+ *   [Sun 2026-03-08 04:20 GMT+8] 实际消息
+ *
+ * 需要剥离这些前缀，只提取真实的用户消息。
+ */
+const OPENCLAW_MSG_PREFIX_RE =
+  /^Sender\s+\(untrusted metadata\):\s*```json\s*\{[\s\S]*?\}\s*```\s*\n*\s*\[[^\]]*\]\s*/;
+
+function stripOpenClawMetadata(raw: string): string {
+  return raw.replace(OPENCLAW_MSG_PREFIX_RE, "");
+}
+
 function getPromptFromContext(context: Context): { text: string; systemPrompt?: string } {
   const messages = context.messages ?? [];
   let lastUserText = "";
@@ -445,6 +463,7 @@ function getPromptFromContext(context: Context): { text: string; systemPrompt?: 
       break;
     }
   }
+  lastUserText = stripOpenClawMetadata(lastUserText);
   const systemPrompt =
     typeof context.systemPrompt === "string" && context.systemPrompt.trim().length > 0
       ? context.systemPrompt.trim()
@@ -912,7 +931,7 @@ export function createCursorAgentStreamFn(
                 const requestContext = buildRequestContext(workspace, systemPrompt, openclawTools);
                 toLog("cursor-requestContext-built", {
                   workspace,
-                  rulesCount: requestContext.rules.length,
+                  rules: requestContext.rules,
                 });
                 send({
                   execClientMessage: {
