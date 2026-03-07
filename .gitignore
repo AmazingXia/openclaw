@@ -9,6 +9,7 @@ bun.lockb
 coverage
 __pycache__/
 *.pyc
+**/*.log
 .tsbuildinfo
 .pnpm-store
 .worktrees/

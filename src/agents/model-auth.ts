@@ -209,7 +209,7 @@ export async function resolveApiKeyForProvider(params: {
 
   const normalized = normalizeProviderId(provider);
   if (normalized === "cursor") {
-    const { DEFAULT_CURSOR_CREDENTIALS } = await import("./cursor-agent-stream.js");
+    const { DEFAULT_CURSOR_CREDENTIALS } = await import("../cursor-agent/cursor-agent-stream.js");
     if (DEFAULT_CURSOR_CREDENTIALS.accessToken) {
       return {
         apiKey: DEFAULT_CURSOR_CREDENTIALS.accessToken,
