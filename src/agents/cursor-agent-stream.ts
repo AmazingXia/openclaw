@@ -92,6 +92,8 @@ function encodeEnvelope(obj: unknown): Buffer {
 /** 从 context.messages 取最后一条用户消息；若有 systemPrompt 则一并返回（用于内联到 text）。 */
 function getPromptFromContext(context: Context): { text: string; systemPrompt?: string } {
   const messages = context.messages ?? [];
+  // console.log('messages===>', JSON.stringify(messages))
+
   let lastUserText = "";
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i] as Message & { role: string; content: unknown };
@@ -133,7 +135,8 @@ export function createCursorAgentStreamFn(
   options?: CursorAgentStreamOptions,
 ): StreamFn {
   const signal = options?.signal;
-  const askMode = options?.askMode ?? true;
+  // const askMode = options?.askMode ?? true;
+  const askMode = true;
 
   // return (model, context, streamOptions) => {
   return (model, context) => {
@@ -160,7 +163,6 @@ export function createCursorAgentStreamFn(
       const requestId = randomUUID();
       const conversationId = randomUUID();
       const modeStr = askMode ? AGENT_MODE_ASK : AGENT_MODE_AGENT;
-      console.log("modeStr===>", modeStr);
 
       const runRequest = {
         runRequest: {
@@ -283,10 +285,14 @@ export function createCursorAgentStreamFn(
 
             if (msg.interactionUpdate?.textDelta?.text) {
               const t = msg.interactionUpdate.textDelta.text;
+              console.log("textDelta text===>", t);
               fullText += t;
               continue;
             }
             if (msg.interactionUpdate?.thinkingDelta) {
+              const t = msg.interactionUpdate.thinkingDelta.text;
+              console.log("thinkingDelta text===>", t);
+              fullText += t;
               continue;
             }
             if (msg.interactionUpdate?.heartbeat) {
@@ -301,6 +307,7 @@ export function createCursorAgentStreamFn(
             }
 
             if (msg.execServerMessage?.requestContextArgs) {
+              console.log("msg.execServerMessage?===>", msg.execServerMessage?.requestContextArgs);
               req.write(
                 encodeEnvelope({
                   execClientMessage: {
@@ -309,11 +316,11 @@ export function createCursorAgentStreamFn(
                         requestContext: {
                           env: {
                             osVersion: "darwin 25.0.0",
-                            workspacePaths: ["/tmp/workspace"],
+                            workspacePaths: ["/Users/niu/.openclaw/workspace"],
                             shell: "zsh",
                             sandboxEnabled: false,
                             timeZone: "Asia/Shanghai",
-                            projectFolder: "/tmp/workspace",
+                            projectFolder: "/Users/niu/.openclaw/workspace",
                           },
                           webSearchEnabled: true,
                         },

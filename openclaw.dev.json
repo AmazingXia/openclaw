@@ -19,6 +19,9 @@
     "restart": true,
     "ownerDisplay": "raw"
   },
+  "tools": {
+    "profile": "full"
+  },
   "gateway": {
     "mode": "local",
     "auth": {
