@@ -452,25 +452,168 @@ function getPromptFromContext(context: Context): { text: string; systemPrompt?: 
   return { text: lastUserText.trim(), systemPrompt };
 }
 
-// ── 构建 requestContext（注入 OpenClaw 信息）──────────────
+// ── Cursor Rule 类型 ──────────────────────────────────────
 
-function buildRequestContext(workspace: string, systemPrompt?: string, tools?: unknown[]) {
-  const rules: Array<{ content: string }> = [];
+type CursorRule = {
+  fullPath: string;
+  content: string;
+  type: { global: Record<string, never> } | { agentFetched: { description: string } };
+};
 
-  if (systemPrompt) {
-    rules.push({ content: systemPrompt });
+// ── OpenClaw Tool 桥接接口 ─────────────────────────────────
+
+interface OpenClawToolRef {
+  name: string;
+  description?: string;
+  parameters?: unknown;
+  execute?: (toolCallId: string, params: Record<string, unknown>) => Promise<unknown>;
+}
+
+const OPENCLAW_TOOL_CMD_PREFIX = "openclaw-tool";
+
+function extractOpenClawTools(contextTools: unknown[] | undefined): OpenClawToolRef[] {
+  if (!contextTools || !Array.isArray(contextTools)) {
+    return [];
+  }
+  return (contextTools as OpenClawToolRef[]).filter((t) => typeof t?.name === "string");
+}
+
+function buildToolParamsDoc(schema: unknown): string {
+  if (!schema || typeof schema !== "object") {
+    return "  (无参数)";
+  }
+  const s = schema as Record<string, unknown>;
+  const props = s.properties as Record<string, Record<string, unknown>> | undefined;
+  if (!props) {
+    return "  (无参数)";
+  }
+  const required = Array.isArray(s.required) ? (s.required as string[]) : [];
+  return Object.entries(props)
+    .map(([key, prop]) => {
+      const type = typeof prop.type === "string" ? prop.type : "unknown";
+      const desc = typeof prop.description === "string" ? prop.description : "";
+      const req = required.includes(key) ? " (必填)" : " (可选)";
+      return `  - ${key}: ${type}${req}${desc ? ` — ${desc}` : ""}`;
+    })
+    .join("\n");
+}
+
+function buildToolRules(tools: OpenClawToolRef[], workspace: string): CursorRule[] {
+  return tools
+    .filter((t) => t.name && t.execute)
+    .map((t) => ({
+      fullPath: join(workspace, `.openclaw/tools/${t.name}`),
+      content: [
+        `# OpenClaw Tool: ${t.name}`,
+        "",
+        t.description ?? "(no description)",
+        "",
+        "## 参数",
+        buildToolParamsDoc(t.parameters),
+        "",
+        "## 调用方式",
+        `在 shell 中运行以下命令来调用此工具：`,
+        "```bash",
+        `${OPENCLAW_TOOL_CMD_PREFIX} ${t.name} '<json_params>'`,
+        "```",
+        "",
+        "示例：",
+        "```bash",
+        `${OPENCLAW_TOOL_CMD_PREFIX} ${t.name} '${JSON.stringify(buildToolDemoParams(t.parameters))}'`,
+        "```",
+      ].join("\n"),
+      type: { agentFetched: { description: t.description ?? t.name } } as const,
+    }));
+}
+
+function buildToolDemoParams(schema: unknown): Record<string, unknown> {
+  if (!schema || typeof schema !== "object") {
+    return {};
+  }
+  const s = schema as Record<string, unknown>;
+  const props = s.properties as Record<string, Record<string, unknown>> | undefined;
+  if (!props) {
+    return {};
+  }
+  const demo: Record<string, unknown> = {};
+  const required = Array.isArray(s.required) ? (s.required as string[]) : [];
+  for (const [key, prop] of Object.entries(props)) {
+    if (!required.includes(key)) {
+      continue;
+    }
+    const type = prop.type;
+    if (type === "string") {
+      demo[key] = `<${key}>`;
+    } else if (type === "number") {
+      demo[key] = 0;
+    } else if (type === "boolean") {
+      demo[key] = false;
+    }
+  }
+  return demo;
+}
+
+async function tryExecuteOpenClawTool(
+  command: string,
+  tools: OpenClawToolRef[],
+): Promise<{ handled: boolean; result?: string }> {
+  const trimmed = command.trim();
+  if (!trimmed.startsWith(OPENCLAW_TOOL_CMD_PREFIX + " ")) {
+    return { handled: false };
   }
 
-  if (tools && Array.isArray(tools) && tools.length > 0) {
-    const toolDescriptions = (tools as Array<{ name?: string; description?: string }>)
-      .filter((t) => t.name)
-      .map((t) => `- ${t.name}: ${t.description ?? "(no description)"}`)
-      .join("\n");
-    if (toolDescriptions) {
-      rules.push({
-        content: `## OpenClaw Available Tools\nThe following tools are available in the OpenClaw environment. When you need to perform these actions, execute them directly using the corresponding exec tools (read files, write files, run shell commands, etc.):\n${toolDescriptions}`,
-      });
+  const rest = trimmed.slice(OPENCLAW_TOOL_CMD_PREFIX.length + 1).trim();
+  const spaceIdx = rest.indexOf(" ");
+  const toolName = spaceIdx === -1 ? rest : rest.slice(0, spaceIdx);
+  const rawArgs = spaceIdx === -1 ? "" : rest.slice(spaceIdx + 1).trim();
+
+  const tool = tools.find((t) => t.name === toolName);
+  if (!tool?.execute) {
+    return {
+      handled: true,
+      result: JSON.stringify({ error: `Unknown OpenClaw tool: ${toolName}` }),
+    };
+  }
+
+  let params: Record<string, unknown> = {};
+  if (rawArgs) {
+    try {
+      const cleaned = rawArgs.replace(/^'(.*)'$/s, "$1").replace(/^"(.*)"$/s, "$1");
+      params = JSON.parse(cleaned) as Record<string, unknown>;
+    } catch {
+      return {
+        handled: true,
+        result: JSON.stringify({ error: `Invalid JSON params for ${toolName}: ${rawArgs}` }),
+      };
     }
+  }
+
+  try {
+    const toolResult = await tool.execute(randomUUID(), params);
+    return { handled: true, result: JSON.stringify(toolResult, null, 2) };
+  } catch (e: unknown) {
+    return {
+      handled: true,
+      result: JSON.stringify({ error: `Tool ${toolName} failed: ${(e as Error).message}` }),
+    };
+  }
+}
+
+// ── 构建 requestContext（注入 OpenClaw 信息）──────────────
+
+function buildRequestContext(workspace: string, systemPrompt?: string, tools?: OpenClawToolRef[]) {
+  const rules: CursorRule[] = [];
+
+  if (systemPrompt) {
+    rules.push({
+      fullPath: join(workspace, ".openclaw/system-prompt"),
+      content: systemPrompt,
+      type: { global: {} },
+    });
+  }
+
+  if (tools && tools.length > 0) {
+    rules.push(...buildToolRules(tools, workspace));
   }
 
   return {
@@ -499,15 +642,18 @@ export function createCursorAgentStreamFn(
   return (model, context, _streamOptions) => {
     const stream = createAssistantMessageEventStream();
 
+    toLog("context===>", context);
+
     const { text, systemPrompt } = getPromptFromContext(context);
-    const contextTools = (context as unknown as Record<string, unknown>).tools as
+    const rawContextTools = (context as unknown as Record<string, unknown>).tools as
       | unknown[]
       | undefined;
+    const openclawTools = extractOpenClawTools(rawContextTools);
 
     toLog("cursor-start", {
       text: text.slice(0, 200),
       hasSystemPrompt: !!systemPrompt,
-      toolCount: contextTools?.length ?? 0,
+      toolCount: openclawTools.length,
     });
 
     if (!text) {
@@ -530,6 +676,8 @@ export function createCursorAgentStreamFn(
         ? ctxAny.workspaceRoot
         : process.env.OPENCLAW_WORKSPACE || join(homedir(), ".openclaw/workspace"),
     );
+
+    toLog("cursor-workspace===>", workspace);
 
     const run = async () => {
       const requestId = randomUUID();
@@ -761,7 +909,7 @@ export function createCursorAgentStreamFn(
               };
 
               if (esmCase === "requestContextArgs") {
-                const requestContext = buildRequestContext(workspace, systemPrompt, contextTools);
+                const requestContext = buildRequestContext(workspace, systemPrompt, openclawTools);
                 toLog("cursor-requestContext-built", {
                   workspace,
                   rulesCount: requestContext.rules.length,
@@ -895,9 +1043,33 @@ export function createCursorAgentStreamFn(
               if (esmCase === "shellStreamArgs") {
                 const toolCallId = asString(esmValue.toolCallId);
                 const shellBase = { ...base, ...(toolCallId ? { toolCallId } : {}) };
-                setImmediate(() => {
+                const shellCommand = asString(esmValue.command);
+                setImmediate(async () => {
                   try {
                     send({ execClientMessage: { ...shellBase, shellStream: { start: {} } } });
+
+                    const toolBridge = await tryExecuteOpenClawTool(shellCommand, openclawTools);
+                    if (toolBridge.handled) {
+                      toLog("cursor-openclaw-tool-via-shell", { command: shellCommand });
+                      const out = toolBridge.result ?? "";
+                      if (out) {
+                        send({
+                          execClientMessage: {
+                            ...shellBase,
+                            shellStream: { stdout: { data: out } },
+                          },
+                        });
+                      }
+                      send({
+                        execClientMessage: {
+                          ...shellBase,
+                          shellStream: { exit: { exitCode: 0, workingDirectory: workspace } },
+                        },
+                      });
+                      closeExecStream();
+                      return;
+                    }
+
                     const result = execShellOnce(workspace, esmValue) as unknown as Record<
                       string,
                       unknown
@@ -949,11 +1121,54 @@ export function createCursorAgentStreamFn(
               }
 
               if (esmCase === "shellArgs") {
-                const result = execShellOnce(workspace, esmValue);
-                send({
-                  execClientMessage: { ...base, shellResult: { ...result, isBackground: false } },
+                const shellCommand = asString(esmValue.command);
+                setImmediate(async () => {
+                  try {
+                    const toolBridge = await tryExecuteOpenClawTool(shellCommand, openclawTools);
+                    if (toolBridge.handled) {
+                      toLog("cursor-openclaw-tool-via-shell", { command: shellCommand });
+                      send({
+                        execClientMessage: {
+                          ...base,
+                          shellResult: {
+                            success: {
+                              command: shellCommand,
+                              workingDirectory: workspace,
+                              exitCode: 0,
+                              stdout: toolBridge.result ?? "",
+                              stderr: "",
+                            },
+                            isBackground: false,
+                          },
+                        },
+                      });
+                    } else {
+                      const result = execShellOnce(workspace, esmValue);
+                      send({
+                        execClientMessage: {
+                          ...base,
+                          shellResult: { ...result, isBackground: false },
+                        },
+                      });
+                    }
+                    closeExecStream();
+                  } catch (e) {
+                    send({
+                      execClientMessage: {
+                        ...base,
+                        shellResult: {
+                          spawnError: {
+                            command: shellCommand,
+                            workingDirectory: workspace,
+                            error: String(e),
+                          },
+                          isBackground: false,
+                        },
+                      },
+                    });
+                    closeExecStream();
+                  }
                 });
-                closeExecStream();
                 continue;
               }
 
