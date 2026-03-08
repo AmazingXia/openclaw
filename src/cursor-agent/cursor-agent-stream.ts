@@ -69,7 +69,7 @@ function asString(v: unknown): string {
   return "";
 }
 
-function toLog(label: string, data: unknown) {
+export function toLog(label: string, data: unknown) {
   if (typeof data === "object" && data) {
     const d = data as Record<string, unknown>;
     if (d?.interactionUpdate && typeof d.interactionUpdate === "object") {
@@ -227,6 +227,17 @@ const EXEC_SERVER_MESSAGE_CASES = [
   "readMcpResourceExecArgs",
 ];
 
+const INTERACTION_QUERY_CASES = [
+  "webSearchRequestQuery",
+  "webFetchRequestQuery",
+  "askQuestionInteractionQuery",
+  "switchModeRequestQuery",
+  "exaSearchRequestQuery",
+  "exaFetchRequestQuery",
+  "createPlanRequestQuery",
+  "setupVmEnvironmentArgs",
+];
+
 function normalizeInteractionUpdate(raw: unknown) {
   return normalizeOneof(raw, INTERACTION_UPDATE_CASES);
 }
@@ -247,6 +258,39 @@ function normalizeExecServerMessage(
     case: oneof.case,
     value: oneof.value,
   };
+}
+
+function normalizeInteractionQuery(
+  raw: unknown,
+): { id: number; case: string; value: Record<string, unknown> } | null {
+  if (!isObject(raw)) {
+    return null;
+  }
+  const id = Number(raw.id ?? 0);
+  if (isObject(raw.query) && typeof raw.query.case === "string") {
+    return { id, case: raw.query.case, value: (raw.query.value ?? {}) as Record<string, unknown> };
+  }
+  const queryObj = isObject(raw.query) ? raw.query : raw;
+  for (const key of INTERACTION_QUERY_CASES) {
+    if (queryObj[key] !== undefined) {
+      return { id, case: key, value: (queryObj[key] ?? {}) as Record<string, unknown> };
+    }
+  }
+  if (queryObj.switchModeRequest !== undefined) {
+    return {
+      id,
+      case: "switchModeRequestQuery",
+      value: (queryObj.switchModeRequest ?? {}) as Record<string, unknown>,
+    };
+  }
+  if (queryObj.createPlanRequest !== undefined) {
+    return {
+      id,
+      case: "createPlanRequestQuery",
+      value: (queryObj.createPlanRequest ?? {}) as Record<string, unknown>,
+    };
+  }
+  return null;
 }
 
 function normalizeRootMessage(raw: unknown): Record<string, unknown> {
@@ -661,7 +705,7 @@ export function createCursorAgentStreamFn(
   return (model, context, _streamOptions) => {
     const stream = createAssistantMessageEventStream();
 
-    toLog("context===>", context);
+    // toLog("context===>", context);
 
     const { text, systemPrompt } = getPromptFromContext(context);
     const rawContextTools = (context as unknown as Record<string, unknown>).tools as
@@ -669,7 +713,7 @@ export function createCursorAgentStreamFn(
       | undefined;
     const openclawTools = extractOpenClawTools(rawContextTools);
 
-    toLog("cursor-start", {
+    toLog("cursor-start===>", {
       text: text.slice(0, 200),
       hasSystemPrompt: !!systemPrompt,
       toolCount: openclawTools.length,
@@ -754,7 +798,7 @@ export function createCursorAgentStreamFn(
         try {
           req.write(encodeEnvelope(obj));
         } catch (e) {
-          toLog("cursor-send-error", String(e));
+          toLog("cursor-send-error===>", String(e));
         }
       };
 
@@ -866,14 +910,16 @@ export function createCursorAgentStreamFn(
                 }
                 case "thinkingCompleted":
                   lastSubstantiveAt = Date.now();
-                  toLog("cursor-thinking-completed", { durationMs: iu.value?.thinkingDurationMs });
+                  toLog("cursor-thinking-completed===>", {
+                    durationMs: iu.value?.thinkingDurationMs,
+                  });
                   break;
                 case "partialToolCall":
                   lastSubstantiveAt = Date.now();
                   break;
                 case "toolCallStarted":
                   lastSubstantiveAt = Date.now();
-                  toLog("cursor-tool-started", {
+                  toLog("cursor-tool-started===>", {
                     callId: iu.value?.callId,
                     toolCall: iu.value?.toolCall,
                   });
@@ -883,7 +929,7 @@ export function createCursorAgentStreamFn(
                   break;
                 case "toolCallCompleted":
                   lastSubstantiveAt = Date.now();
-                  toLog("cursor-tool-completed", { callId: iu.value?.callId });
+                  toLog("cursor-tool-completed===>", { callId: iu.value?.callId });
                   break;
                 case "stepStarted":
                 case "stepCompleted":
@@ -897,13 +943,13 @@ export function createCursorAgentStreamFn(
                   break;
                 case "heartbeat":
                   if (lastSubstantiveAt > 0 && Date.now() - lastSubstantiveAt > HEARTBEAT_ONLY_MS) {
-                    toLog("cursor-finish-by-heartbeat-only-timeout", {});
+                    toLog("cursor-finish-by-heartbeat-only-timeout===>", {});
                     finish();
                     return;
                   }
                   break;
                 case "turnEnded":
-                  toLog("cursor-turn-ended", iu.value);
+                  toLog("cursor-turn-ended===>", iu.value);
                   finish();
                   return;
                 default:
@@ -1195,8 +1241,52 @@ export function createCursorAgentStreamFn(
               closeExecStream();
               continue;
             }
+
+            // ── interactionQuery ──
+            const iq = normalizeInteractionQuery(msg.interactionQuery);
+            if (iq) {
+              const resp: Record<string, unknown> = { id: iq.id };
+              switch (iq.case) {
+                case "webSearchRequestQuery":
+                  resp.webSearchRequestResponse = { approved: {} };
+                  break;
+                case "webFetchRequestQuery":
+                  resp.webFetchRequestResponse = { approved: {} };
+                  break;
+                case "exaSearchRequestQuery":
+                  resp.exaSearchRequestResponse = { approved: {} };
+                  break;
+                case "exaFetchRequestQuery":
+                  resp.exaFetchRequestResponse = { approved: {} };
+                  break;
+                case "switchModeRequestQuery":
+                  resp.switchModeRequestResponse = {
+                    rejected: { reason: "Mode switching not supported in OpenClaw stream bridge" },
+                  };
+                  break;
+                case "createPlanRequestQuery":
+                  resp.createPlanRequestResponse = { success: {} };
+                  break;
+                case "askQuestionInteractionQuery":
+                  resp.askQuestionInteractionResponse = {
+                    rejected: { reason: "OpenClaw stream bridge has no interactive question UI" },
+                  };
+                  break;
+                case "setupVmEnvironmentArgs":
+                  resp.setupVmEnvironmentResult = { error: { error: "VM setup is not supported" } };
+                  break;
+                default:
+                  toLog("cursor-unhandled-interaction-query===>", iq);
+                  break;
+              }
+              if (Object.keys(resp).length > 1) {
+                toLog("cursor-interaction-response===>", resp);
+                send({ interactionResponse: resp });
+              }
+              continue;
+            }
           } catch (e) {
-            toLog("cursor-parse-error", String(e));
+            toLog("cursor-parse-error===>", String(e));
           }
         }
       });

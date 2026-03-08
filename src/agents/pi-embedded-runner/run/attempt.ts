@@ -4,6 +4,7 @@ import type { AgentMessage, StreamFn } from "@mariozechner/pi-agent-core";
 import { streamSimple } from "@mariozechner/pi-ai";
 import {
   createAgentSession,
+  type CreateAgentSessionOptions,
   DefaultResourceLoader,
   SessionManager,
 } from "@mariozechner/pi-coding-agent";
@@ -14,6 +15,7 @@ import {
   createCursorAgentStreamFn,
   DEFAULT_CURSOR_CREDENTIALS,
 } from "../../../cursor-agent/cursor-agent-stream.js";
+import { toLog } from "../../../cursor-agent/cursor-agent-stream.js";
 import { getMachineDisplayName } from "../../../infra/machine-name.js";
 import { MAX_IMAGE_BYTES } from "../../../media/constants.js";
 import { getGlobalHookRunner } from "../../../plugins/hook-runner-global.js";
@@ -669,6 +671,9 @@ export async function runEmbeddedAttempt(
             params.requireExplicitMessageTarget ?? isSubagentSessionKey(params.sessionKey),
           disableMessageTool: params.disableMessageTool,
         });
+
+    toLog("toolsRaw===>", toolsRaw);
+
     const tools = sanitizeToolsForGoogle({ tools: toolsRaw, provider: params.provider });
     const allowedToolNames = collectAllowedToolNames({
       tools,
@@ -934,7 +939,7 @@ export async function runEmbeddedAttempt(
 
       const allCustomTools = [...customTools, ...clientToolDefs];
 
-      ({ session } = await createAgentSession({
+      const options: CreateAgentSessionOptions = {
         cwd: resolvedWorkspace,
         agentDir,
         authStorage: params.authStorage,
@@ -946,7 +951,11 @@ export async function runEmbeddedAttempt(
         sessionManager,
         settingsManager,
         resourceLoader,
-      }));
+      };
+
+      toLog("createAgentSession options===>", options);
+
+      ({ session } = await createAgentSession(options));
       applySystemPromptOverrideToSession(session, systemPromptText);
       if (!session) {
         throw new Error("Embedded agent session missing");

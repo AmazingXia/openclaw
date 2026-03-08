@@ -20,7 +20,12 @@
     "ownerDisplay": "raw"
   },
   "tools": {
-    "profile": "full"
+    "profile": "full",
+    "web": {
+      "search": {
+        "enabled": false
+      }
+    }
   },
   "gateway": {
     "mode": "local",
