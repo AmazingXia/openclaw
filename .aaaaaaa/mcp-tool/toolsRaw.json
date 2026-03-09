@@ -1,0 +1,1350 @@
+[
+  {
+    "name": "read",
+    "label": "read",
+    "description": "Read the contents of a file. Supports text files and images (jpg, png, gif, webp). Images are sent as attachments. For text files, output is truncated to 2000 lines or 50KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.",
+    "parameters": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "path": {
+          "description": "Path to the file to read (relative or absolute)",
+          "type": "string"
+        },
+        "offset": {
+          "description": "Line number to start reading from (1-indexed)",
+          "type": "number"
+        },
+        "limit": {
+          "description": "Maximum number of lines to read",
+          "type": "number"
+        },
+        "file_path": {
+          "description": "Path to the file to read (relative or absolute)",
+          "type": "string"
+        }
+      }
+    }
+  },
+  {
+    "name": "edit",
+    "label": "edit",
+    "description": "Edit a file by replacing exact text. The oldText must match exactly (including whitespace). Use this for precise, surgical edits.",
+    "parameters": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "path": {
+          "description": "Path to the file to edit (relative or absolute)",
+          "type": "string"
+        },
+        "oldText": {
+          "description": "Exact text to find and replace (must match exactly)",
+          "type": "string"
+        },
+        "newText": {
+          "description": "New text to replace the old text with",
+          "type": "string"
+        },
+        "file_path": {
+          "description": "Path to the file to edit (relative or absolute)",
+          "type": "string"
+        },
+        "old_string": {
+          "description": "Exact text to find and replace (must match exactly)",
+          "type": "string"
+        },
+        "new_string": {
+          "description": "New text to replace the old text with",
+          "type": "string"
+        }
+      }
+    }
+  },
+  {
+    "name": "write",
+    "label": "write",
+    "description": "Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories.",
+    "parameters": {
+      "type": "object",
+      "required": ["content"],
+      "properties": {
+        "path": {
+          "description": "Path to the file to write (relative or absolute)",
+          "type": "string"
+        },
+        "content": {
+          "description": "Content to write to the file",
+          "type": "string"
+        },
+        "file_path": {
+          "description": "Path to the file to write (relative or absolute)",
+          "type": "string"
+        }
+      }
+    }
+  },
+  {
+    "name": "exec",
+    "label": "exec",
+    "description": "Execute shell commands with background continuation. Use yieldMs/background to continue later via process tool. Use pty=true for TTY-required commands (terminal UIs, coding agents).",
+    "parameters": {
+      "type": "object",
+      "required": ["command"],
+      "properties": {
+        "command": {
+          "description": "Shell command to execute",
+          "type": "string"
+        },
+        "workdir": {
+          "description": "Working directory (defaults to cwd)",
+          "type": "string"
+        },
+        "env": {
+          "type": "object",
+          "patternProperties": {
+            "^(.*)$": {
+              "type": "string"
+            }
+          }
+        },
+        "yieldMs": {
+          "description": "Milliseconds to wait before backgrounding (default 10000)",
+          "type": "number"
+        },
+        "background": {
+          "description": "Run in background immediately",
+          "type": "boolean"
+        },
+        "timeout": {
+          "description": "Timeout in seconds (optional, kills process on expiry)",
+          "type": "number"
+        },
+        "pty": {
+          "description": "Run in a pseudo-terminal (PTY) when available (TTY-required CLIs, coding agents)",
+          "type": "boolean"
+        },
+        "elevated": {
+          "description": "Run on the host with elevated permissions (if allowed)",
+          "type": "boolean"
+        },
+        "host": {
+          "description": "Exec host (sandbox|gateway|node).",
+          "type": "string"
+        },
+        "security": {
+          "description": "Exec security mode (deny|allowlist|full).",
+          "type": "string"
+        },
+        "ask": {
+          "description": "Exec ask mode (off|on-miss|always).",
+          "type": "string"
+        },
+        "node": {
+          "description": "Node id/name for host=node.",
+          "type": "string"
+        }
+      }
+    }
+  },
+  {
+    "name": "process",
+    "label": "process",
+    "description": "Manage running exec sessions: list, poll, log, write, send-keys, submit, paste, kill.",
+    "parameters": {
+      "type": "object",
+      "required": ["action"],
+      "properties": {
+        "action": {
+          "description": "Process action",
+          "type": "string"
+        },
+        "sessionId": {
+          "description": "Session id for actions other than list",
+          "type": "string"
+        },
+        "data": {
+          "description": "Data to write for write",
+          "type": "string"
+        },
+        "keys": {
+          "description": "Key tokens to send for send-keys",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "hex": {
+          "description": "Hex bytes to send for send-keys",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "literal": {
+          "description": "Literal string for send-keys",
+          "type": "string"
+        },
+        "text": {
+          "description": "Text to paste for paste",
+          "type": "string"
+        },
+        "bracketed": {
+          "description": "Wrap paste in bracketed mode",
+          "type": "boolean"
+        },
+        "eof": {
+          "description": "Close stdin after write",
+          "type": "boolean"
+        },
+        "offset": {
+          "description": "Log offset",
+          "type": "number"
+        },
+        "limit": {
+          "description": "Log length",
+          "type": "number"
+        },
+        "timeout": {
+          "description": "For poll: wait up to this many milliseconds before returning",
+          "minimum": 0,
+          "type": "number"
+        }
+      }
+    }
+  },
+  {
+    "label": "Browser",
+    "name": "browser",
+    "description": "Control the browser via OpenClaw's browser control server (status/start/stop/profiles/tabs/open/snapshot/screenshot/actions). Profiles: use profile=\"chrome\" for Chrome extension relay takeover (your existing Chrome tabs). Use profile=\"openclaw\" for the isolated openclaw-managed browser. If the user mentions the Chrome extension / Browser Relay / toolbar button / “attach tab”, ALWAYS use profile=\"chrome\" (do not ask which profile). When a node-hosted browser proxy is available, the tool may auto-route to it. Pin a node with node=<id|name> or target=\"node\". Chrome extension relay needs an attached tab: user must click the OpenClaw Browser Relay toolbar icon on the tab (badge ON). If no tab is connected, ask them to attach it. When using refs from snapshot (e.g. e12), keep the same tab: prefer passing targetId from the snapshot response into subsequent actions (act/click/type/etc). For stable, self-resolving refs across calls, use snapshot with refs=\"aria\" (Playwright aria-ref ids). Default refs=\"role\" are role+name-based. Use snapshot+act for UI automation. Avoid act:wait by default; use only in exceptional cases when no reliable UI state exists. target selects browser location (sandbox|host|node). Default: host. Host target allowed.",
+    "parameters": {
+      "type": "object",
+      "required": ["action"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "status",
+            "start",
+            "stop",
+            "profiles",
+            "tabs",
+            "open",
+            "focus",
+            "close",
+            "snapshot",
+            "screenshot",
+            "navigate",
+            "console",
+            "pdf",
+            "upload",
+            "dialog",
+            "act"
+          ]
+        },
+        "target": {
+          "type": "string",
+          "enum": ["sandbox", "host", "node"]
+        },
+        "node": {
+          "type": "string"
+        },
+        "profile": {
+          "type": "string"
+        },
+        "targetUrl": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "targetId": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "number"
+        },
+        "maxChars": {
+          "type": "number"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["efficient"]
+        },
+        "snapshotFormat": {
+          "type": "string",
+          "enum": ["aria", "ai"]
+        },
+        "refs": {
+          "type": "string",
+          "enum": ["role", "aria"]
+        },
+        "interactive": {
+          "type": "boolean"
+        },
+        "compact": {
+          "type": "boolean"
+        },
+        "depth": {
+          "type": "number"
+        },
+        "selector": {
+          "type": "string"
+        },
+        "frame": {
+          "type": "string"
+        },
+        "labels": {
+          "type": "boolean"
+        },
+        "fullPage": {
+          "type": "boolean"
+        },
+        "ref": {
+          "type": "string"
+        },
+        "element": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["png", "jpeg"]
+        },
+        "level": {
+          "type": "string"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "inputRef": {
+          "type": "string"
+        },
+        "timeoutMs": {
+          "type": "number"
+        },
+        "accept": {
+          "type": "boolean"
+        },
+        "promptText": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "click",
+            "type",
+            "press",
+            "hover",
+            "drag",
+            "select",
+            "fill",
+            "resize",
+            "wait",
+            "evaluate",
+            "close"
+          ]
+        },
+        "doubleClick": {
+          "type": "boolean"
+        },
+        "button": {
+          "type": "string"
+        },
+        "modifiers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "text": {
+          "type": "string"
+        },
+        "submit": {
+          "type": "boolean"
+        },
+        "slowly": {
+          "type": "boolean"
+        },
+        "key": {
+          "type": "string"
+        },
+        "delayMs": {
+          "type": "number"
+        },
+        "startRef": {
+          "type": "string"
+        },
+        "endRef": {
+          "type": "string"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "additionalProperties": true,
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        },
+        "timeMs": {
+          "type": "number"
+        },
+        "textGone": {
+          "type": "string"
+        },
+        "loadState": {
+          "type": "string"
+        },
+        "fn": {
+          "type": "string"
+        },
+        "request": {
+          "type": "object",
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "click",
+                "type",
+                "press",
+                "hover",
+                "drag",
+                "select",
+                "fill",
+                "resize",
+                "wait",
+                "evaluate",
+                "close"
+              ]
+            },
+            "targetId": {
+              "type": "string"
+            },
+            "ref": {
+              "type": "string"
+            },
+            "doubleClick": {
+              "type": "boolean"
+            },
+            "button": {
+              "type": "string"
+            },
+            "modifiers": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "text": {
+              "type": "string"
+            },
+            "submit": {
+              "type": "boolean"
+            },
+            "slowly": {
+              "type": "boolean"
+            },
+            "key": {
+              "type": "string"
+            },
+            "delayMs": {
+              "type": "number"
+            },
+            "startRef": {
+              "type": "string"
+            },
+            "endRef": {
+              "type": "string"
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "fields": {
+              "type": "array",
+              "items": {
+                "additionalProperties": true,
+                "type": "object",
+                "properties": {}
+              }
+            },
+            "width": {
+              "type": "number"
+            },
+            "height": {
+              "type": "number"
+            },
+            "timeMs": {
+              "type": "number"
+            },
+            "selector": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            },
+            "loadState": {
+              "type": "string"
+            },
+            "textGone": {
+              "type": "string"
+            },
+            "timeoutMs": {
+              "type": "number"
+            },
+            "fn": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "label": "Canvas",
+    "name": "canvas",
+    "description": "Control node canvases (present/hide/navigate/eval/snapshot/A2UI). Use snapshot to capture the rendered UI.",
+    "parameters": {
+      "type": "object",
+      "required": ["action"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["present", "hide", "navigate", "eval", "snapshot", "a2ui_push", "a2ui_reset"]
+        },
+        "gatewayUrl": {
+          "type": "string"
+        },
+        "gatewayToken": {
+          "type": "string"
+        },
+        "timeoutMs": {
+          "type": "number"
+        },
+        "node": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        },
+        "url": {
+          "type": "string"
+        },
+        "javaScript": {
+          "type": "string"
+        },
+        "outputFormat": {
+          "type": "string",
+          "enum": ["png", "jpg", "jpeg"]
+        },
+        "maxWidth": {
+          "type": "number"
+        },
+        "quality": {
+          "type": "number"
+        },
+        "delayMs": {
+          "type": "number"
+        },
+        "jsonl": {
+          "type": "string"
+        },
+        "jsonlPath": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  {
+    "label": "Nodes",
+    "name": "nodes",
+    "description": "Discover and control paired nodes (status/describe/pairing/notify/camera/screen/location/notifications/run/invoke).",
+    "parameters": {
+      "type": "object",
+      "required": ["action"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "status",
+            "describe",
+            "pending",
+            "approve",
+            "reject",
+            "notify",
+            "camera_snap",
+            "camera_list",
+            "camera_clip",
+            "screen_record",
+            "location_get",
+            "notifications_list",
+            "notifications_action",
+            "device_status",
+            "device_info",
+            "device_permissions",
+            "device_health",
+            "run",
+            "invoke"
+          ]
+        },
+        "gatewayUrl": {
+          "type": "string"
+        },
+        "gatewayToken": {
+          "type": "string"
+        },
+        "timeoutMs": {
+          "type": "number"
+        },
+        "node": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "sound": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["passive", "active", "timeSensitive"]
+        },
+        "delivery": {
+          "type": "string",
+          "enum": ["system", "overlay", "auto"]
+        },
+        "facing": {
+          "type": "string",
+          "enum": ["front", "back", "both"],
+          "description": "camera_snap: front/back/both; camera_clip: front/back only."
+        },
+        "maxWidth": {
+          "type": "number"
+        },
+        "quality": {
+          "type": "number"
+        },
+        "delayMs": {
+          "type": "number"
+        },
+        "deviceId": {
+          "type": "string"
+        },
+        "duration": {
+          "type": "string"
+        },
+        "durationMs": {
+          "maximum": 300000,
+          "type": "number"
+        },
+        "includeAudio": {
+          "type": "boolean"
+        },
+        "fps": {
+          "type": "number"
+        },
+        "screenIndex": {
+          "type": "number"
+        },
+        "outPath": {
+          "type": "string"
+        },
+        "maxAgeMs": {
+          "type": "number"
+        },
+        "locationTimeoutMs": {
+          "type": "number"
+        },
+        "desiredAccuracy": {
+          "type": "string",
+          "enum": ["coarse", "balanced", "precise"]
+        },
+        "notificationAction": {
+          "type": "string",
+          "enum": ["open", "dismiss", "reply"]
+        },
+        "notificationKey": {
+          "type": "string"
+        },
+        "notificationReplyText": {
+          "type": "string"
+        },
+        "command": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "env": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "commandTimeoutMs": {
+          "type": "number"
+        },
+        "invokeTimeoutMs": {
+          "type": "number"
+        },
+        "needsScreenRecording": {
+          "type": "boolean"
+        },
+        "invokeCommand": {
+          "type": "string"
+        },
+        "invokeParamsJson": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  {
+    "label": "Message",
+    "name": "message",
+    "description": "Send, delete, and manage messages via channel plugins. Supports actions: send, broadcast.",
+    "parameters": {
+      "type": "object",
+      "required": ["action"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["send"]
+        },
+        "channel": {
+          "type": "string"
+        },
+        "target": {
+          "description": "Target channel/user id or name.",
+          "type": "string"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "description": "Recipient/channel targets (same format as --target); accepts ids or names when the directory is available.",
+            "type": "string"
+          }
+        },
+        "accountId": {
+          "type": "string"
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "effectId": {
+          "description": "Message effect name/id for sendWithEffect (e.g., invisible ink).",
+          "type": "string"
+        },
+        "effect": {
+          "description": "Alias for effectId (e.g., invisible-ink, balloons).",
+          "type": "string"
+        },
+        "media": {
+          "description": "Media URL or local path. data: URLs are not supported here, use buffer.",
+          "type": "string"
+        },
+        "filename": {
+          "type": "string"
+        },
+        "buffer": {
+          "description": "Base64 payload for attachments (optionally a data: URL).",
+          "type": "string"
+        },
+        "contentType": {
+          "type": "string"
+        },
+        "mimeType": {
+          "type": "string"
+        },
+        "caption": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        },
+        "replyTo": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "asVoice": {
+          "type": "boolean"
+        },
+        "silent": {
+          "type": "boolean"
+        },
+        "quoteText": {
+          "description": "Quote text for Telegram reply_parameters",
+          "type": "string"
+        },
+        "bestEffort": {
+          "type": "boolean"
+        },
+        "gifPlayback": {
+          "type": "boolean"
+        },
+        "messageId": {
+          "description": "Target message id for reaction. If omitted, defaults to the current inbound message id when available.",
+          "type": "string"
+        },
+        "message_id": {
+          "description": "snake_case alias of messageId. If omitted, defaults to the current inbound message id when available.",
+          "type": "string"
+        },
+        "emoji": {
+          "type": "string"
+        },
+        "remove": {
+          "type": "boolean"
+        },
+        "targetAuthor": {
+          "type": "string"
+        },
+        "targetAuthorUuid": {
+          "type": "string"
+        },
+        "groupId": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "number"
+        },
+        "before": {
+          "type": "string"
+        },
+        "after": {
+          "type": "string"
+        },
+        "around": {
+          "type": "string"
+        },
+        "fromMe": {
+          "type": "boolean"
+        },
+        "includeArchived": {
+          "type": "boolean"
+        },
+        "pollQuestion": {
+          "type": "string"
+        },
+        "pollOption": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "pollDurationHours": {
+          "type": "number"
+        },
+        "pollMulti": {
+          "type": "boolean"
+        },
+        "channelId": {
+          "description": "Channel id filter (search/thread list/event create).",
+          "type": "string"
+        },
+        "channelIds": {
+          "type": "array",
+          "items": {
+            "description": "Channel id filter (repeatable).",
+            "type": "string"
+          }
+        },
+        "guildId": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        },
+        "authorId": {
+          "type": "string"
+        },
+        "authorIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "roleId": {
+          "type": "string"
+        },
+        "roleIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "participant": {
+          "type": "string"
+        },
+        "emojiName": {
+          "type": "string"
+        },
+        "stickerId": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "stickerName": {
+          "type": "string"
+        },
+        "stickerDesc": {
+          "type": "string"
+        },
+        "stickerTags": {
+          "type": "string"
+        },
+        "threadName": {
+          "type": "string"
+        },
+        "autoArchiveMin": {
+          "type": "number"
+        },
+        "appliedTags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "query": {
+          "type": "string"
+        },
+        "eventName": {
+          "type": "string"
+        },
+        "eventType": {
+          "type": "string"
+        },
+        "startTime": {
+          "type": "string"
+        },
+        "endTime": {
+          "type": "string"
+        },
+        "desc": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "durationMin": {
+          "type": "number"
+        },
+        "until": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "deleteDays": {
+          "type": "number"
+        },
+        "gatewayUrl": {
+          "type": "string"
+        },
+        "gatewayToken": {
+          "type": "string"
+        },
+        "timeoutMs": {
+          "type": "number"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "number"
+        },
+        "parentId": {
+          "type": "string"
+        },
+        "topic": {
+          "type": "string"
+        },
+        "position": {
+          "type": "number"
+        },
+        "nsfw": {
+          "type": "boolean"
+        },
+        "rateLimitPerUser": {
+          "type": "number"
+        },
+        "categoryId": {
+          "type": "string"
+        },
+        "clearParent": {
+          "description": "Clear the parent/category when supported by the provider.",
+          "type": "boolean"
+        },
+        "activityType": {
+          "description": "Activity type: playing, streaming, listening, watching, competing, custom.",
+          "type": "string"
+        },
+        "activityName": {
+          "description": "Activity name shown in sidebar (e.g. 'with fire'). Ignored for custom type.",
+          "type": "string"
+        },
+        "activityUrl": {
+          "description": "Streaming URL (Twitch or YouTube). Only used with streaming type; may not render for bots.",
+          "type": "string"
+        },
+        "activityState": {
+          "description": "State text. For custom type this is the status text; for others it shows in the flyout.",
+          "type": "string"
+        },
+        "status": {
+          "description": "Bot status: online, dnd, idle, invisible.",
+          "type": "string"
+        }
+      }
+    }
+  },
+  {
+    "label": "TTS",
+    "name": "tts",
+    "description": "Convert text to speech. Audio is delivered automatically from the tool result — reply with NO_REPLY after a successful call to avoid duplicate messages.",
+    "parameters": {
+      "type": "object",
+      "required": ["text"],
+      "properties": {
+        "text": {
+          "description": "Text to convert to speech.",
+          "type": "string"
+        },
+        "channel": {
+          "description": "Optional channel id to pick output format (e.g. telegram).",
+          "type": "string"
+        }
+      }
+    }
+  },
+  {
+    "label": "Agents",
+    "name": "agents_list",
+    "description": "List OpenClaw agent ids you can target with `sessions_spawn` when `runtime=\"subagent\"` (based on subagent allowlists).",
+    "parameters": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "label": "Sessions",
+    "name": "sessions_list",
+    "description": "List sessions with optional filters and last messages.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "kinds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "limit": {
+          "minimum": 1,
+          "type": "number"
+        },
+        "activeMinutes": {
+          "minimum": 1,
+          "type": "number"
+        },
+        "messageLimit": {
+          "minimum": 0,
+          "type": "number"
+        }
+      }
+    }
+  },
+  {
+    "label": "Session History",
+    "name": "sessions_history",
+    "description": "Fetch message history for a session.",
+    "parameters": {
+      "type": "object",
+      "required": ["sessionKey"],
+      "properties": {
+        "sessionKey": {
+          "type": "string"
+        },
+        "limit": {
+          "minimum": 1,
+          "type": "number"
+        },
+        "includeTools": {
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  {
+    "label": "Session Send",
+    "name": "sessions_send",
+    "description": "Send a message into another session. Use sessionKey or label to identify the target.",
+    "parameters": {
+      "type": "object",
+      "required": ["message"],
+      "properties": {
+        "sessionKey": {
+          "type": "string"
+        },
+        "label": {
+          "minLength": 1,
+          "maxLength": 64,
+          "type": "string"
+        },
+        "agentId": {
+          "minLength": 1,
+          "maxLength": 64,
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "timeoutSeconds": {
+          "minimum": 0,
+          "type": "number"
+        }
+      }
+    }
+  },
+  {
+    "label": "Sessions",
+    "name": "sessions_spawn",
+    "description": "Spawn an isolated session (runtime=\"subagent\" or runtime=\"acp\"). mode=\"run\" is one-shot and mode=\"session\" is persistent/thread-bound.",
+    "parameters": {
+      "type": "object",
+      "required": ["task"],
+      "properties": {
+        "task": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "runtime": {
+          "type": "string",
+          "enum": ["subagent", "acp"]
+        },
+        "agentId": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "thinking": {
+          "type": "string"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "runTimeoutSeconds": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "timeoutSeconds": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "thread": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["run", "session"]
+        },
+        "cleanup": {
+          "type": "string",
+          "enum": ["delete", "keep"]
+        },
+        "sandbox": {
+          "type": "string",
+          "enum": ["inherit", "require"]
+        },
+        "attachments": {
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "content"],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "content": {
+                "maxLength": 6700000,
+                "type": "string"
+              },
+              "encoding": {
+                "type": "string",
+                "enum": ["utf8", "base64"]
+              },
+              "mimeType": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "attachAs": {
+          "type": "object",
+          "properties": {
+            "mountPath": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "label": "Subagents",
+    "name": "subagents",
+    "description": "List, kill, or steer spawned sub-agents for this requester session. Use this for sub-agent orchestration.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["list", "kill", "steer"]
+        },
+        "target": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "recentMinutes": {
+          "minimum": 1,
+          "type": "number"
+        }
+      }
+    }
+  },
+  {
+    "label": "Session Status",
+    "name": "session_status",
+    "description": "Show a /status-equivalent session status card (usage + time + cost when available). Use for model-use questions (📊 session_status). Optional: set per-session model override (model=default resets overrides).",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "sessionKey": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  {
+    "label": "Web Fetch",
+    "name": "web_fetch",
+    "description": "Fetch and extract readable content from a URL (HTML → markdown/text). Use for lightweight page access without browser automation.",
+    "parameters": {
+      "type": "object",
+      "required": ["url"],
+      "properties": {
+        "url": {
+          "description": "HTTP or HTTPS URL to fetch.",
+          "type": "string"
+        },
+        "extractMode": {
+          "type": "string",
+          "enum": ["markdown", "text"],
+          "description": "Extraction mode (\"markdown\" or \"text\").",
+          "default": "markdown"
+        },
+        "maxChars": {
+          "description": "Maximum characters to return (truncates when exceeded).",
+          "minimum": 100,
+          "type": "number"
+        }
+      }
+    }
+  },
+  {
+    "label": "Memory Search",
+    "name": "memory_search",
+    "description": "Mandatory recall step: semantically search MEMORY.md + memory/*.md (and optional session transcripts) before answering questions about prior work, decisions, dates, people, preferences, or todos; returns top snippets with path + lines. If response has disabled=true, memory retrieval is unavailable and should be surfaced to the user.",
+    "parameters": {
+      "type": "object",
+      "required": ["query"],
+      "properties": {
+        "query": {
+          "type": "string"
+        },
+        "maxResults": {
+          "type": "number"
+        },
+        "minScore": {
+          "type": "number"
+        }
+      }
+    }
+  },
+  {
+    "label": "Memory Get",
+    "name": "memory_get",
+    "description": "Safe snippet read from MEMORY.md or memory/*.md with optional from/lines; use after memory_search to pull only the needed lines and keep context small.",
+    "parameters": {
+      "type": "object",
+      "required": ["path"],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "from": {
+          "type": "number"
+        },
+        "lines": {
+          "type": "number"
+        }
+      }
+    }
+  }
+]

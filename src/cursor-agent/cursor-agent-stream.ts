@@ -35,6 +35,14 @@ import {
 } from "../agents/stream-message-shared.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import {
+  buildOpenClawMcpState,
+  execOpenClawMcpTool,
+  extractOpenClawTools,
+  listOpenClawMcpResources,
+  type OpenClawToolRef,
+  readOpenClawMcpResource,
+} from "./mcp-tool-bridge.js";
+import {
   createCursorSessionBridge,
   stripOpenClawMetadata,
   type CursorSessionHistoryRule,
@@ -493,6 +501,9 @@ function execShellOnce(workspace: string, args: Record<string, unknown>) {
  */
 function getPromptFromContext(context: Context): { text: string; systemPrompt?: string } {
   const messages = context.messages ?? [];
+
+  toLog("messages===>", messages);
+
   let lastUserText = "";
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i] as Message & { role: string; content: unknown };
@@ -523,23 +534,7 @@ type CursorRule = {
   type: { global: Record<string, never> } | { agentFetched: { description: string } };
 };
 
-// ── OpenClaw Tool 桥接接口 ─────────────────────────────────
-
-interface OpenClawToolRef {
-  name: string;
-  description?: string;
-  parameters?: unknown;
-  execute?: (toolCallId: string, params: Record<string, unknown>) => Promise<unknown>;
-}
-
 const OPENCLAW_TOOL_CMD_PREFIX = "openclaw-tool";
-
-function extractOpenClawTools(contextTools: unknown[] | undefined): OpenClawToolRef[] {
-  if (!contextTools || !Array.isArray(contextTools)) {
-    return [];
-  }
-  return (contextTools as OpenClawToolRef[]).filter((t) => typeof t?.name === "string");
-}
 
 function buildToolParamsDoc(schema: unknown): string {
   if (!schema || typeof schema !== "object") {
@@ -664,7 +659,7 @@ async function tryExecuteOpenClawTool(
 
 // ── 构建 requestContext（注入 OpenClaw 信息）──────────────
 
-function buildRequestContext(params: {
+async function buildRequestContext(params: {
   workspace: string;
   systemPrompt?: string;
   tools?: OpenClawToolRef[];
@@ -672,6 +667,7 @@ function buildRequestContext(params: {
 }) {
   const { workspace, systemPrompt, tools, historyRule } = params;
   const rules: CursorRule[] = [];
+  const mcpState = await buildOpenClawMcpState(workspace, tools ?? []);
 
   if (systemPrompt) {
     rules.push({
@@ -708,6 +704,16 @@ function buildRequestContext(params: {
     },
     webSearchEnabled: true,
     rules,
+    tools: mcpState.tools.map((tool) => ({
+      name: tool.name,
+      providerIdentifier: tool.providerIdentifier,
+      toolName: tool.toolName,
+      description: tool.description,
+      ...(isObject(tool.inputSchema) ? { inputSchema: tool.inputSchema } : {}),
+    })),
+    mcpInstructions: mcpState.mcpInstructions,
+    mcpFileSystemOptions: mcpState.mcpFileSystemOptions,
+    supportsMcpAuth: true,
   };
 }
 
@@ -1019,30 +1025,157 @@ export function createCursorAgentStreamFn(
                 const workspaceId =
                   typeof esmValue.workspaceId === "string" ? esmValue.workspaceId.trim() : "";
                 sessionBridge.updateRequestContext({ notesSessionId, workspaceId });
-                const requestContext = buildRequestContext({
+                buildRequestContext({
                   workspace,
                   systemPrompt,
                   tools: openclawTools,
                   historyRule: sessionBridge.buildHistoryRule(workspace, context.messages, text),
+                })
+                  .then((requestContext) => {
+                    toLog("cursor-requestContext-built", {
+                      workspace,
+                      notesSessionId,
+                      workspaceId,
+                      rules: requestContext.rules.map((rule) => ({
+                        fullPath: rule.fullPath,
+                        type: Object.keys(rule.type)[0],
+                      })),
+                      mcpTools: Array.isArray(requestContext.tools)
+                        ? requestContext.tools.length
+                        : 0,
+                      mcpDescriptors:
+                        requestContext.mcpFileSystemOptions?.mcpDescriptors?.length || 0,
+                    });
+                    send({
+                      execClientMessage: {
+                        ...base,
+                        requestContextResult: {
+                          success: { requestContext },
+                        },
+                      },
+                    });
+                    closeExecStream();
+                  })
+                  .catch((error) => {
+                    send({
+                      execClientMessage: {
+                        ...base,
+                        requestContextResult: {
+                          error: {
+                            error: String((error as Error)?.message || error),
+                          },
+                        },
+                      },
+                    });
+                    closeExecStream();
+                  });
+                continue;
+              }
+
+              if (esmCase === "mcpArgs") {
+                toLog("cursor-mcpArgs===>", {
+                  providerIdentifier:
+                    typeof esmValue.providerIdentifier === "string"
+                      ? esmValue.providerIdentifier
+                      : "",
+                  toolName:
+                    typeof esmValue.toolName === "string"
+                      ? esmValue.toolName
+                      : typeof esmValue.name === "string"
+                        ? esmValue.name
+                        : "",
                 });
-                toLog("cursor-requestContext-built", {
-                  workspace,
-                  notesSessionId,
-                  workspaceId,
-                  rules: requestContext.rules.map((rule) => ({
-                    fullPath: rule.fullPath,
-                    type: Object.keys(rule.type)[0],
-                  })),
-                });
-                send({
-                  execClientMessage: {
-                    ...base,
-                    requestContextResult: {
-                      success: { requestContext },
-                    },
-                  },
-                });
-                closeExecStream();
+                execOpenClawMcpTool({
+                  args: esmValue,
+                  tools: openclawTools,
+                  signal,
+                })
+                  .then((result) => {
+                    send({
+                      execClientMessage: {
+                        ...base,
+                        mcpResult: result,
+                      },
+                    });
+                    closeExecStream();
+                  })
+                  .catch((error) => {
+                    send({
+                      execClientMessage: {
+                        ...base,
+                        mcpResult: {
+                          error: {
+                            error: String((error as Error)?.message || error),
+                          },
+                        },
+                      },
+                    });
+                    closeExecStream();
+                  });
+                continue;
+              }
+
+              if (esmCase === "listMcpResourcesExecArgs") {
+                listOpenClawMcpResources({
+                  server: typeof esmValue.server === "string" ? esmValue.server : undefined,
+                  tools: openclawTools,
+                })
+                  .then((result) => {
+                    send({
+                      execClientMessage: {
+                        ...base,
+                        listMcpResourcesExecResult: result,
+                      },
+                    });
+                    closeExecStream();
+                  })
+                  .catch((error) => {
+                    send({
+                      execClientMessage: {
+                        ...base,
+                        listMcpResourcesExecResult: {
+                          error: {
+                            error: String((error as Error)?.message || error),
+                          },
+                        },
+                      },
+                    });
+                    closeExecStream();
+                  });
+                continue;
+              }
+
+              if (esmCase === "readMcpResourceExecArgs") {
+                readOpenClawMcpResource({
+                  uri: typeof esmValue.uri === "string" ? esmValue.uri : undefined,
+                  server: typeof esmValue.server === "string" ? esmValue.server : undefined,
+                  downloadPath:
+                    typeof esmValue.downloadPath === "string" ? esmValue.downloadPath : undefined,
+                  tools: openclawTools,
+                  workspaceRoot: workspace,
+                })
+                  .then((result) => {
+                    send({
+                      execClientMessage: {
+                        ...base,
+                        readMcpResourceExecResult: result,
+                      },
+                    });
+                    closeExecStream();
+                  })
+                  .catch((error) => {
+                    send({
+                      execClientMessage: {
+                        ...base,
+                        readMcpResourceExecResult: {
+                          error: {
+                            error: String((error as Error)?.message || error),
+                          },
+                        },
+                      },
+                    });
+                    closeExecStream();
+                  });
                 continue;
               }
 

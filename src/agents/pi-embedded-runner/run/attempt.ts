@@ -672,7 +672,7 @@ export async function runEmbeddedAttempt(
           disableMessageTool: params.disableMessageTool,
         });
 
-    toLog("toolsRaw===>", toolsRaw);
+    // toLog("toolsRaw===>", toolsRaw);
 
     const tools = sanitizeToolsForGoogle({ tools: toolsRaw, provider: params.provider });
     const allowedToolNames = collectAllowedToolNames({
