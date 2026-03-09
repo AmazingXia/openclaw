@@ -499,12 +499,80 @@ function execShellOnce(workspace: string, args: Record<string, unknown>) {
  *
  * 需要剥离这些前缀，只提取真实的用户消息。
  */
-function getPromptFromContext(context: Context): { text: string; systemPrompt?: string } {
+type CursorSelectedImage = {
+  data: string;
+  mimeType: string;
+  uuid: string;
+};
+
+function normalizeBase64ImageData(raw: string): { data: string; mimeType?: string } {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { data: "" };
+  }
+
+  const dataUrlMatch = /^data:([^;,]+);base64,(.+)$/i.exec(trimmed);
+  if (!dataUrlMatch) {
+    return { data: trimmed };
+  }
+
+  return {
+    data: dataUrlMatch[2]?.trim() ?? "",
+    mimeType: dataUrlMatch[1]?.trim(),
+  };
+}
+
+function normalizeContextImagePart(part: unknown, index: number): CursorSelectedImage | null {
+  if (!isObject(part)) {
+    return null;
+  }
+
+  const nestedImage = isObject(part.image) ? part.image : null;
+  const imagePart =
+    typeof part.data === "string"
+      ? part
+      : part.type === "image"
+        ? part
+        : nestedImage && part.type !== "text"
+          ? nestedImage
+          : null;
+  if (!imagePart) {
+    return null;
+  }
+
+  const rawData = typeof imagePart.data === "string" ? imagePart.data : "";
+  const normalizedData = normalizeBase64ImageData(rawData);
+  if (!normalizedData.data) {
+    return null;
+  }
+
+  const rawMimeType =
+    typeof imagePart.mimeType === "string" && imagePart.mimeType.trim().length > 0
+      ? imagePart.mimeType.trim()
+      : undefined;
+  const rawUuid =
+    typeof imagePart.uuid === "string" && imagePart.uuid.trim().length > 0
+      ? imagePart.uuid.trim()
+      : undefined;
+
+  return {
+    data: normalizedData.data,
+    mimeType: rawMimeType ?? normalizedData.mimeType ?? "image/png",
+    uuid: rawUuid ?? `openclaw-image-${index}-${randomUUID()}`,
+  };
+}
+
+export function getPromptFromContext(context: Context): {
+  text: string;
+  systemPrompt?: string;
+  selectedImages: CursorSelectedImage[];
+} {
   const messages = context.messages ?? [];
 
   toLog("messages===>", messages);
 
   let lastUserText = "";
+  let selectedImages: CursorSelectedImage[] = [];
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i] as Message & { role: string; content: unknown };
     if (m.role === "user") {
@@ -514,6 +582,9 @@ function getPromptFromContext(context: Context): { text: string; systemPrompt?: 
           .filter((p) => p.type === "text" && typeof p.text === "string")
           .map((p) => (p as { text: string }).text)
           .join("");
+        selectedImages = (m.content as unknown[])
+          .map((part, index) => normalizeContextImagePart(part, index))
+          .filter((part): part is CursorSelectedImage => part !== null);
       }
       break;
     }
@@ -523,7 +594,7 @@ function getPromptFromContext(context: Context): { text: string; systemPrompt?: 
     typeof context.systemPrompt === "string" && context.systemPrompt.trim().length > 0
       ? context.systemPrompt.trim()
       : undefined;
-  return { text: lastUserText.trim(), systemPrompt };
+  return { text: lastUserText.trim(), systemPrompt, selectedImages };
 }
 
 // ── Cursor Rule 类型 ──────────────────────────────────────
@@ -731,7 +802,7 @@ export function createCursorAgentStreamFn(
 
     // toLog("context===>", context);
 
-    const { text, systemPrompt } = getPromptFromContext(context);
+    const { text, systemPrompt, selectedImages } = getPromptFromContext(context);
     const rawContextTools = (context as unknown as Record<string, unknown>).tools as
       | unknown[]
       | undefined;
@@ -743,12 +814,13 @@ export function createCursorAgentStreamFn(
     toLog("cursor-start===>", {
       text: text.slice(0, 200),
       hasSystemPrompt: !!systemPrompt,
+      imageCount: selectedImages.length,
       toolCount: openclawTools.length,
       conversationId: sessionBridge.getConversationId(),
       hasConversationState: Object.keys(initialConversationState).length > 0,
     });
 
-    if (!text) {
+    if (!text && selectedImages.length === 0) {
       stream.push({
         type: "done",
         reason: "stop",
@@ -785,6 +857,17 @@ export function createCursorAgentStreamFn(
                 text: promptWithHistory,
                 messageId: randomUUID(),
                 mode: modeStr,
+                ...(selectedImages.length > 0
+                  ? {
+                      selectedContext: {
+                        selectedImages: selectedImages.map((image) => ({
+                          data: image.data,
+                          mimeType: image.mimeType,
+                          uuid: image.uuid,
+                        })),
+                      },
+                    }
+                  : {}),
               },
             },
           },

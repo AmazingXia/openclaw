@@ -1,0 +1,17 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "Sender (untrusted metadata):\n```json\n{\n  \"label\": \"openclaw-control-ui\",\n  \"id\": \"openclaw-control-ui\"\n}\n```\n\n[Tue 2026-03-10 02:12 GMT+8] 分析这个图片内容"
+      },
+      {
+        "type": "image",
+        "data": "iVBORw0KGgooSJSc0K7WthYQ5PT3cMHNgfu3fvw8uXYdiwYSt+//0yZs9WXeaSiIiIiIiIiIiIiKg6+z/OsoUZI9X5LgAAAABJRU5ErkJggg==",
+        "mimeType": "image/png"
+      }
+    ],
+    "timestamp": 1773079950561
+  }
+]
