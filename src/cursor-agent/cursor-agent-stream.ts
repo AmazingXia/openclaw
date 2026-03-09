@@ -43,6 +43,10 @@ import {
   readOpenClawMcpResource,
 } from "./mcp-tool-bridge.js";
 import {
+  collectCursorRequestContextRules,
+  type CursorRequestContextRule,
+} from "./request-context-rules.js";
+import {
   createCursorSessionBridge,
   stripOpenClawMetadata,
   type CursorSessionHistoryRule,
@@ -569,8 +573,6 @@ export function getPromptFromContext(context: Context): {
 } {
   const messages = context.messages ?? [];
 
-  toLog("messages===>", messages);
-
   let lastUserText = "";
   let selectedImages: CursorSelectedImage[] = [];
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -597,14 +599,6 @@ export function getPromptFromContext(context: Context): {
   return { text: lastUserText.trim(), systemPrompt, selectedImages };
 }
 
-// ── Cursor Rule 类型 ──────────────────────────────────────
-
-type CursorRule = {
-  fullPath: string;
-  content: string;
-  type: { global: Record<string, never> } | { agentFetched: { description: string } };
-};
-
 const OPENCLAW_TOOL_CMD_PREFIX = "openclaw-tool";
 
 function buildToolParamsDoc(schema: unknown): string {
@@ -627,7 +621,7 @@ function buildToolParamsDoc(schema: unknown): string {
     .join("\n");
 }
 
-function buildToolRules(tools: OpenClawToolRef[], workspace: string): CursorRule[] {
+function buildToolRules(tools: OpenClawToolRef[], workspace: string): CursorRequestContextRule[] {
   return tools
     .filter((t) => t.name && t.execute)
     .map((t) => ({
@@ -737,11 +731,11 @@ async function buildRequestContext(params: {
   historyRule?: CursorSessionHistoryRule | null;
 }) {
   const { workspace, systemPrompt, tools, historyRule } = params;
-  const rules: CursorRule[] = [];
+  const rules = await collectCursorRequestContextRules(workspace);
   const mcpState = await buildOpenClawMcpState(workspace, tools ?? []);
 
   if (systemPrompt) {
-    rules.push({
+    rules.unshift({
       fullPath: join(workspace, ".openclaw/system-prompt"),
       content: systemPrompt,
       type: { global: {} },
@@ -1119,6 +1113,7 @@ export function createCursorAgentStreamFn(
                       workspace,
                       notesSessionId,
                       workspaceId,
+                      hasSystemPrompt: !!systemPrompt,
                       rules: requestContext.rules.map((rule) => ({
                         fullPath: rule.fullPath,
                         type: Object.keys(rule.type)[0],
