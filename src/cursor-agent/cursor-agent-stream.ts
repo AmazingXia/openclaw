@@ -95,6 +95,9 @@ export function toLog(label: string, data: unknown) {
       if (iu.tokenDelta) {
         return;
       }
+      if (iu.kvServerMessage) {
+        return;
+      }
     }
   }
   const ts = new Date().toISOString();
@@ -737,7 +740,7 @@ async function buildRequestContext(params: {
   if (systemPrompt) {
     rules.unshift({
       fullPath: join(workspace, ".openclaw/system-prompt"),
-      content: systemPrompt,
+      content: `<system>\n${systemPrompt}\n</system>`,
       type: { global: {} },
     });
   }
@@ -807,7 +810,6 @@ export function createCursorAgentStreamFn(
 
     toLog("cursor-start===>", {
       text: text.slice(0, 200),
-      hasSystemPrompt: !!systemPrompt,
       imageCount: selectedImages.length,
       toolCount: openclawTools.length,
       conversationId: sessionBridge.getConversationId(),
@@ -1113,7 +1115,6 @@ export function createCursorAgentStreamFn(
                       workspace,
                       notesSessionId,
                       workspaceId,
-                      hasSystemPrompt: !!systemPrompt,
                       rules: requestContext.rules.map((rule) => ({
                         fullPath: rule.fullPath,
                         type: Object.keys(rule.type)[0],
