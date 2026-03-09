@@ -921,6 +921,8 @@ export async function runEmbeddedAttempt(
         cfg: params.config,
         agentId: sessionAgentId,
       });
+
+      toLog("clientToolLoopDetection===>", clientToolLoopDetection);
       const clientToolDefs = params.clientTools
         ? toClientToolDefinitions(
             params.clientTools,
@@ -953,7 +955,7 @@ export async function runEmbeddedAttempt(
         resourceLoader,
       };
 
-      toLog("createAgentSession options===>", options);
+      // toLog("createAgentSession options===>", options);
 
       ({ session } = await createAgentSession(options));
       applySystemPromptOverrideToSession(session, systemPromptText);
@@ -1019,6 +1021,7 @@ export async function runEmbeddedAttempt(
       } else if (params.model.api === "cursor-agent") {
         activeSession.agent.streamFn = createCursorAgentStreamFn(DEFAULT_CURSOR_CREDENTIALS, {
           signal: runAbortController.signal,
+          sessionManager,
         });
       } else {
         // Force a stable streamFn reference so vitest can reliably mock @mariozechner/pi-ai.

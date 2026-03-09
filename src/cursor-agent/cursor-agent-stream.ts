@@ -34,6 +34,12 @@ import {
   // buildAssistantMessage as buildStreamAssistantMessage,
 } from "../agents/stream-message-shared.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
+import {
+  createCursorSessionBridge,
+  stripOpenClawMetadata,
+  type CursorSessionHistoryRule,
+  type CursorSessionStore,
+} from "./session-state.js";
 
 const log = createSubsystemLogger("cursor-agent-stream");
 
@@ -105,6 +111,7 @@ export const DEFAULT_CURSOR_CREDENTIALS: CursorAgentCredentials = {
 export type CursorAgentStreamOptions = {
   signal?: AbortSignal;
   askMode?: boolean;
+  sessionManager?: CursorSessionStore;
 };
 
 // ── Checksum ──────────────────────────────────────────
@@ -484,13 +491,6 @@ function execShellOnce(workspace: string, args: Record<string, unknown>) {
  *
  * 需要剥离这些前缀，只提取真实的用户消息。
  */
-const OPENCLAW_MSG_PREFIX_RE =
-  /^Sender\s+\(untrusted metadata\):\s*```json\s*\{[\s\S]*?\}\s*```\s*\n*\s*\[[^\]]*\]\s*/;
-
-function stripOpenClawMetadata(raw: string): string {
-  return raw.replace(OPENCLAW_MSG_PREFIX_RE, "");
-}
-
 function getPromptFromContext(context: Context): { text: string; systemPrompt?: string } {
   const messages = context.messages ?? [];
   let lastUserText = "";
@@ -664,7 +664,13 @@ async function tryExecuteOpenClawTool(
 
 // ── 构建 requestContext（注入 OpenClaw 信息）──────────────
 
-function buildRequestContext(workspace: string, systemPrompt?: string, tools?: OpenClawToolRef[]) {
+function buildRequestContext(params: {
+  workspace: string;
+  systemPrompt?: string;
+  tools?: OpenClawToolRef[];
+  historyRule?: CursorSessionHistoryRule | null;
+}) {
+  const { workspace, systemPrompt, tools, historyRule } = params;
   const rules: CursorRule[] = [];
 
   if (systemPrompt) {
@@ -677,6 +683,18 @@ function buildRequestContext(workspace: string, systemPrompt?: string, tools?: O
 
   if (tools && tools.length > 0) {
     rules.push(...buildToolRules(tools, workspace));
+  }
+
+  if (historyRule) {
+    rules.push({
+      fullPath: historyRule.fullPath,
+      content: historyRule.content,
+      type: {
+        agentFetched: {
+          description: historyRule.description,
+        },
+      },
+    });
   }
 
   return {
@@ -712,11 +730,16 @@ export function createCursorAgentStreamFn(
       | unknown[]
       | undefined;
     const openclawTools = extractOpenClawTools(rawContextTools);
+    const sessionBridge = createCursorSessionBridge(options?.sessionManager);
+    const initialConversationState = sessionBridge.getConversationState();
+    const promptWithHistory = sessionBridge.buildPrompt(text, context.messages);
 
     toLog("cursor-start===>", {
       text: text.slice(0, 200),
       hasSystemPrompt: !!systemPrompt,
       toolCount: openclawTools.length,
+      conversationId: sessionBridge.getConversationId(),
+      hasConversationState: Object.keys(initialConversationState).length > 0,
     });
 
     if (!text) {
@@ -744,16 +767,16 @@ export function createCursorAgentStreamFn(
 
     const run = async () => {
       const requestId = randomUUID();
-      const conversationId = randomUUID();
+      const conversationId = sessionBridge.getConversationId();
       const modeStr = askMode ? AGENT_MODE.ask : AGENT_MODE.agent;
 
       const runRequest = {
         runRequest: {
-          conversationState: {},
+          conversationState: initialConversationState,
           action: {
             userMessageAction: {
               userMessage: {
-                text,
+                text: promptWithHistory,
                 messageId: randomUUID(),
                 mode: modeStr,
               },
@@ -792,6 +815,7 @@ export function createCursorAgentStreamFn(
       let buffer = Buffer.alloc(0);
       let ended = false;
       let lastSubstantiveAt = 0;
+      let latestConversationState = initialConversationState;
       let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
 
       const send = (obj: unknown) => {
@@ -888,6 +912,21 @@ export function createCursorAgentStreamFn(
             toLog("cursor-msg===>", rawMsg);
             const msg = normalizeRootMessage(rawMsg);
 
+            const checkpointUpdate = msg.conversationCheckpointUpdate ?? msg.conversationCheckpoint;
+            if (isObject(checkpointUpdate)) {
+              latestConversationState = checkpointUpdate;
+              sessionBridge.updateConversationCheckpoint(checkpointUpdate);
+              toLog("cursor-conversation-checkpoint-updated===>", {
+                turnCount: Array.isArray(checkpointUpdate.turns)
+                  ? checkpointUpdate.turns.length
+                  : undefined,
+                fileStates: isObject(checkpointUpdate.fileStatesV2)
+                  ? Object.keys(checkpointUpdate.fileStatesV2).length
+                  : undefined,
+              });
+              continue;
+            }
+
             // ── interactionUpdate ──
             const iu = normalizeInteractionUpdate(msg.interactionUpdate);
             if (iu) {
@@ -949,6 +988,7 @@ export function createCursorAgentStreamFn(
                   }
                   break;
                 case "turnEnded":
+                  sessionBridge.updateConversationCheckpoint(latestConversationState);
                   toLog("cursor-turn-ended===>", iu.value);
                   finish();
                   return;
@@ -974,10 +1014,25 @@ export function createCursorAgentStreamFn(
               };
 
               if (esmCase === "requestContextArgs") {
-                const requestContext = buildRequestContext(workspace, systemPrompt, openclawTools);
+                const notesSessionId =
+                  typeof esmValue.notesSessionId === "string" ? esmValue.notesSessionId.trim() : "";
+                const workspaceId =
+                  typeof esmValue.workspaceId === "string" ? esmValue.workspaceId.trim() : "";
+                sessionBridge.updateRequestContext({ notesSessionId, workspaceId });
+                const requestContext = buildRequestContext({
+                  workspace,
+                  systemPrompt,
+                  tools: openclawTools,
+                  historyRule: sessionBridge.buildHistoryRule(workspace, context.messages, text),
+                });
                 toLog("cursor-requestContext-built", {
                   workspace,
-                  rules: requestContext.rules,
+                  notesSessionId,
+                  workspaceId,
+                  rules: requestContext.rules.map((rule) => ({
+                    fullPath: rule.fullPath,
+                    type: Object.keys(rule.type)[0],
+                  })),
                 });
                 send({
                   execClientMessage: {
@@ -1291,7 +1346,10 @@ export function createCursorAgentStreamFn(
         }
       });
 
-      req.on("end", () => finish());
+      req.on("end", () => {
+        sessionBridge.updateConversationCheckpoint(latestConversationState);
+        finish();
+      });
       req.on("error", (err) => finish(err));
       setTimeout(() => {
         if (!ended) {
