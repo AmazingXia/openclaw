@@ -18,6 +18,7 @@ import {
   statSync,
   existsSync,
   appendFileSync,
+  mkdirSync,
 } from "fs";
 import { mkdir, readFile, readdir, unlink, writeFile } from "fs/promises";
 import { connect as http2Connect } from "http2";
@@ -42,10 +43,7 @@ import {
   type OpenClawToolRef,
   readOpenClawMcpResource,
 } from "./mcp-tool-bridge.js";
-import {
-  collectCursorRequestContextRules,
-  type CursorRequestContextRule,
-} from "./request-context-rules.js";
+import { collectCursorRequestContextRules } from "./request-context-rules.js";
 import {
   createCursorSessionBridge,
   stripOpenClawMetadata,
@@ -69,7 +67,6 @@ const AGENT_MODE = {
 } as const;
 
 // ── 日志与字符串安全转换 ───────────────────────────────
-
 const LOG_FILE = join(process.cwd(), ".log/openclaw.log");
 const CURSOR_LOG_FILE = join(process.cwd(), ".log/cursor.log");
 
@@ -88,6 +85,9 @@ function asString(v: unknown): string {
 }
 
 export function toLog(label: string, data: unknown) {
+  if (!data) {
+    return;
+  }
   if (typeof data === "object" && data) {
     const d = data as Record<string, unknown>;
     if (d?.interactionUpdate) {
@@ -101,9 +101,10 @@ export function toLog(label: string, data: unknown) {
     }
   }
   const ts = new Date().toISOString();
-  const payload = typeof data === "string" ? data : JSON.stringify(data);
   const logFile = label.indexOf("cursor") !== -1 ? CURSOR_LOG_FILE : LOG_FILE;
+  const payload = typeof data === "string" ? data : JSON.stringify(data);
   try {
+    mkdirSync(dirname(logFile), { recursive: true });
     appendFileSync(logFile, `[${ts}] ${label} ${payload}\n`);
   } catch {}
 }
@@ -604,81 +605,6 @@ export function getPromptFromContext(context: Context): {
 
 const OPENCLAW_TOOL_CMD_PREFIX = "openclaw-tool";
 
-function buildToolParamsDoc(schema: unknown): string {
-  if (!schema || typeof schema !== "object") {
-    return "  (无参数)";
-  }
-  const s = schema as Record<string, unknown>;
-  const props = s.properties as Record<string, Record<string, unknown>> | undefined;
-  if (!props) {
-    return "  (无参数)";
-  }
-  const required = Array.isArray(s.required) ? (s.required as string[]) : [];
-  return Object.entries(props)
-    .map(([key, prop]) => {
-      const type = typeof prop.type === "string" ? prop.type : "unknown";
-      const desc = typeof prop.description === "string" ? prop.description : "";
-      const req = required.includes(key) ? " (必填)" : " (可选)";
-      return `  - ${key}: ${type}${req}${desc ? ` — ${desc}` : ""}`;
-    })
-    .join("\n");
-}
-
-function buildToolRules(tools: OpenClawToolRef[], workspace: string): CursorRequestContextRule[] {
-  return tools
-    .filter((t) => t.name && t.execute)
-    .map((t) => ({
-      fullPath: join(workspace, `.openclaw/tools/${t.name}`),
-      content: [
-        `# OpenClaw Tool: ${t.name}`,
-        "",
-        t.description ?? "(no description)",
-        "",
-        "## 参数",
-        buildToolParamsDoc(t.parameters),
-        "",
-        "## 调用方式",
-        `在 shell 中运行以下命令来调用此工具：`,
-        "```bash",
-        `${OPENCLAW_TOOL_CMD_PREFIX} ${t.name} '<json_params>'`,
-        "```",
-        "",
-        "示例：",
-        "```bash",
-        `${OPENCLAW_TOOL_CMD_PREFIX} ${t.name} '${JSON.stringify(buildToolDemoParams(t.parameters))}'`,
-        "```",
-      ].join("\n"),
-      type: { agentFetched: { description: t.description ?? t.name } } as const,
-    }));
-}
-
-function buildToolDemoParams(schema: unknown): Record<string, unknown> {
-  if (!schema || typeof schema !== "object") {
-    return {};
-  }
-  const s = schema as Record<string, unknown>;
-  const props = s.properties as Record<string, Record<string, unknown>> | undefined;
-  if (!props) {
-    return {};
-  }
-  const demo: Record<string, unknown> = {};
-  const required = Array.isArray(s.required) ? (s.required as string[]) : [];
-  for (const [key, prop] of Object.entries(props)) {
-    if (!required.includes(key)) {
-      continue;
-    }
-    const type = prop.type;
-    if (type === "string") {
-      demo[key] = `<${key}>`;
-    } else if (type === "number") {
-      demo[key] = 0;
-    } else if (type === "boolean") {
-      demo[key] = false;
-    }
-  }
-  return demo;
-}
-
 async function tryExecuteOpenClawTool(
   command: string,
   tools: OpenClawToolRef[],
@@ -734,19 +660,24 @@ async function buildRequestContext(params: {
   historyRule?: CursorSessionHistoryRule | null;
 }) {
   const { workspace, systemPrompt, tools, historyRule } = params;
-  const rules = await collectCursorRequestContextRules(workspace);
+  const trimmedSystemPrompt =
+    typeof systemPrompt === "string" && systemPrompt.trim().length > 0
+      ? systemPrompt.trim()
+      : undefined;
+  const rules = await collectCursorRequestContextRules(workspace, {
+    includeOpenClawBootstrapFiles: true,
+  });
   const mcpState = await buildOpenClawMcpState(workspace, tools ?? []);
 
-  if (systemPrompt) {
-    rules.unshift({
+  toLog("mcpState===>", mcpState);
+  toLog("systemPrompt===>", trimmedSystemPrompt);
+
+  if (trimmedSystemPrompt) {
+    rules.push({
       fullPath: join(workspace, ".openclaw/system-prompt"),
-      content: `<system>\n${systemPrompt}\n</system>`,
+      content: `<system>\n${trimmedSystemPrompt}\n</system>`,
       type: { global: {} },
     });
-  }
-
-  if (tools && tools.length > 0) {
-    rules.push(...buildToolRules(tools, workspace));
   }
 
   if (historyRule) {
@@ -760,6 +691,9 @@ async function buildRequestContext(params: {
       },
     });
   }
+
+  toLog("rules===>", rules);
+  toLog("tools===>", tools);
 
   return {
     env: {

@@ -1,6 +1,20 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Context } from "@mariozechner/pi-ai";
-import { describe, expect, it } from "vitest";
-import { getPromptFromContext } from "./cursor-agent-stream.js";
+import { afterEach, describe, expect, it } from "vitest";
+import { getPromptFromContext, toLog } from "./cursor-agent-stream.js";
+
+let tempLogDir = "";
+
+afterEach(async () => {
+  delete process.env.OPENCLAW_CURSOR_AGENT_LOG_ROOT;
+  if (!tempLogDir) {
+    return;
+  }
+  await rm(tempLogDir, { recursive: true, force: true });
+  tempLogDir = "";
+});
 
 function buildOpenClawUserText(text: string): string {
   return [
@@ -99,5 +113,28 @@ describe("cursor-agent stream prompt extraction", () => {
       data: "d2VicC1ieXRlcw==",
       mimeType: "image/webp",
     });
+  });
+
+  it("writes structured debug dumps into data-demo", async () => {
+    tempLogDir = await mkdtemp(join(tmpdir(), "openclaw-cursor-log-"));
+    process.env.OPENCLAW_CURSOR_AGENT_LOG_ROOT = tempLogDir;
+
+    toLog("mcpState===>", { tools: [{ name: "read" }] });
+    toLog("systemPrompt===>", "hello system");
+    toLog("rules===>", [{ fullPath: "AGENTS.md", content: "rule" }]);
+    toLog("tools===>", [{ name: "read" }]);
+
+    await expect(
+      readFile(join(tempLogDir, "data-demo", "mcpState.json"), "utf-8"),
+    ).resolves.toContain('"name": "read"');
+    await expect(
+      readFile(join(tempLogDir, "data-demo", "systemPrompt.txt"), "utf-8"),
+    ).resolves.toContain("hello system");
+    await expect(readFile(join(tempLogDir, "data-demo", "rules.json"), "utf-8")).resolves.toContain(
+      '"fullPath": "AGENTS.md"',
+    );
+    await expect(readFile(join(tempLogDir, "data-demo", "tools.json"), "utf-8")).resolves.toContain(
+      '"name": "read"',
+    );
   });
 });

@@ -272,11 +272,13 @@ export async function collectCursorRequestContextRules(
   options?: {
     homeDir?: string;
     includeHomeSkillRoots?: boolean;
+    includeOpenClawBootstrapFiles?: boolean;
   },
 ): Promise<CursorRequestContextRule[]> {
   const rules: CursorRequestContextRule[] = [];
   const seenPaths = new Set<string>();
   const ancestorDirs = buildAncestorDirectories(workspaceRoot);
+  const includeOpenClawBootstrapFiles = options?.includeOpenClawBootstrapFiles ?? true;
 
   for (const dir of ancestorDirs) {
     const rulesDir = join(dir, ".cursor", "rules");
@@ -297,17 +299,19 @@ export async function collectCursorRequestContextRules(
       });
     }
 
-    for (const filename of OPENCLAW_BOOTSTRAP_FILENAMES) {
-      const filePath = join(dir, filename);
-      const text = await readTextFileIfExists(filePath);
-      if (!text) {
-        continue;
+    if (includeOpenClawBootstrapFiles) {
+      for (const filename of OPENCLAW_BOOTSTRAP_FILENAMES) {
+        const filePath = join(dir, filename);
+        const text = await readTextFileIfExists(filePath);
+        if (!text) {
+          continue;
+        }
+        pushRule(rules, seenPaths, {
+          fullPath: filePath,
+          content: text,
+          type: toRuleType({}, true),
+        });
       }
-      pushRule(rules, seenPaths, {
-        fullPath: filePath,
-        content: text,
-        type: toRuleType({}, true),
-      });
     }
 
     for (const filename of COMPAT_RULE_META_FILENAMES) {
