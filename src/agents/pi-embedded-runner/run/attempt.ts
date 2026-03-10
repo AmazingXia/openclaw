@@ -136,6 +136,8 @@ type PromptBuildHookRunner = {
   ) => Promise<PluginHookBeforeAgentStartResult | undefined>;
 };
 
+toLog("src/agents/pi-embedded-runner/run/attempt.ts===>", "");
+
 export function isOllamaCompatProvider(model: {
   provider?: string;
   baseUrl?: string;
@@ -922,7 +924,7 @@ export async function runEmbeddedAttempt(
         agentId: sessionAgentId,
       });
 
-      toLog("clientToolLoopDetection===>", clientToolLoopDetection);
+      // toLog("clientToolLoopDetection===>", clientToolLoopDetection);
       const clientToolDefs = params.clientTools
         ? toClientToolDefinitions(
             params.clientTools,

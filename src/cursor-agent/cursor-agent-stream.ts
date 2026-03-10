@@ -90,14 +90,14 @@ function asString(v: unknown): string {
 export function toLog(label: string, data: unknown) {
   if (typeof data === "object" && data) {
     const d = data as Record<string, unknown>;
-    if (d?.interactionUpdate && typeof d.interactionUpdate === "object") {
+    if (d?.interactionUpdate) {
       const iu = d.interactionUpdate as Record<string, unknown>;
       if (iu.tokenDelta) {
         return;
       }
-      if (iu.kvServerMessage) {
-        return;
-      }
+    }
+    if (d?.kvServerMessage) {
+      return;
     }
   }
   const ts = new Date().toISOString();
