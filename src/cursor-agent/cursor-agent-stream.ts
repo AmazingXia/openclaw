@@ -665,7 +665,8 @@ async function buildRequestContext(params: {
       ? systemPrompt.trim()
       : undefined;
   const rules = await collectCursorRequestContextRules(workspace, {
-    includeOpenClawBootstrapFiles: true,
+    includeOpenClawBootstrapFiles: false,
+    includeHomeSkillRoots: false,
   });
   const mcpState = await buildOpenClawMcpState(workspace, tools ?? []);
 
