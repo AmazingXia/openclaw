@@ -1,7 +1,7 @@
 import { existsSync, statSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import { homedir as resolveHomeDir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import {
   DEFAULT_AGENTS_FILENAME,
   DEFAULT_BOOTSTRAP_FILENAME,
@@ -279,7 +279,6 @@ export async function collectCursorRequestContextRules(
   const seenPaths = new Set<string>();
   const ancestorDirs = buildAncestorDirectories(workspaceRoot);
   const includeOpenClawBootstrapFiles = options?.includeOpenClawBootstrapFiles ?? true;
-
   for (const dir of ancestorDirs) {
     const rulesDir = join(dir, ".cursor", "rules");
     const mdcFiles = await collectFiles(rulesDir, (name) => name.endsWith(".mdc"));
@@ -330,9 +329,13 @@ export async function collectCursorRequestContextRules(
 
   const skillRoots = new Set<string>();
   for (const dir of ancestorDirs) {
-    skillRoots.add(join(dir, ".cursor", "skills"));
-    skillRoots.add(join(dir, ".claude", "skills"));
-    skillRoots.add(join(dir, ".codex", "skills"));
+    const base = basename(dir);
+    if (base === ".openclaw") {
+      // 支持 ~/.openclaw/skills 这种老路径
+      skillRoots.add(join(dir, "skills"));
+    } else {
+      skillRoots.add(join(dir, ".openclaw", "skills"));
+    }
   }
 
   const includeHomeSkillRoots = options?.includeHomeSkillRoots ?? true;
@@ -368,6 +371,5 @@ export async function collectCursorRequestContextRules(
       });
     }
   }
-
   return rules;
 }
